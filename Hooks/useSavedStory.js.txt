@@ -1,0 +1,16 @@
+import { useState, useEffect } from "react";
+
+export function useSavedStory(key = "skrivstigen-story") {
+  const [story, setStory] = useState(() => {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  useEffect(() => {
+    if (story) {
+      localStorage.setItem(key, JSON.stringify(story));
+    }
+  }, [story, key]);
+
+  return [story, setStory];
+}
