@@ -20,6 +20,12 @@ function App() {
   const [language, setLanguage] = useState(() => localStorage.getItem('skrivstigen-language') || 'sv')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [installPromptEvent, setInstallPromptEvent] = useState(null)
+  const [showIosHint, setShowIosHint] = useState(true)
+
+  const isStandalone = typeof window !== 'undefined' &&
+    (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true)
+  const isIos = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
 
   useEffect(() => {
     localStorage.setItem('skrivstigen-stories', JSON.stringify(savedStories))
@@ -32,6 +38,29 @@ function App() {
   useEffect(() => {
     localStorage.setItem('skrivstigen-language', language)
   }, [language])
+
+  useEffect(() => {
+    function handleBeforeInstallPrompt(event) {
+      event.preventDefault()
+      setInstallPromptEvent(event)
+    }
+    function handleAppInstalled() {
+      setInstallPromptEvent(null)
+    }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    window.addEventListener('appinstalled', handleAppInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+      window.removeEventListener('appinstalled', handleAppInstalled)
+    }
+  }, [])
+
+  async function installApp() {
+    if (!installPromptEvent) return
+    installPromptEvent.prompt()
+    await installPromptEvent.userChoice
+    setInstallPromptEvent(null)
+  }
 
   async function readErrorMessage(response) {
     try {
@@ -132,6 +161,8 @@ function App() {
         <circle cx="115" cy="60" r="2" fill="#ffc9e0" opacity="0.7" />
       </svg>
     </div>
+    {!isStandalone && !story && installPromptEvent && <div className="install-banner"><span>Vill du ha Skrivstigen som en app på hemskärmen?</span><div className="install-banner-actions"><button onClick={installApp}>Installera appen</button><button className="dismiss" onClick={() => setInstallPromptEvent(null)} aria-label="Stäng">×</button></div></div>}
+    {!isStandalone && !story && !installPromptEvent && isIos && showIosHint && <div className="install-banner"><span>Lägg till som app: tryck Dela-ikonen <svg width="14" height="16" viewBox="0 0 14 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ verticalAlign: 'middle', margin: '0 2px' }}><path d="M7 1v9M4 4l3-3 3 3M1 9v5a1 1 0 001 1h10a1 1 0 001-1V9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg> nedtill i Safari, välj sedan "Lägg till på hemskärmen".</span><div className="install-banner-actions"><button className="dismiss" onClick={() => setShowIosHint(false)} aria-label="Stäng">×</button></div></div>}
     <header className="topbar"><button className="brand" onClick={reset}><span>✦</span> Skrivstigen</button><div className="header-actions">{savedStories.length > 0 && <button className="quiet-button" onClick={() => setLibraryOpen(!libraryOpen)}>Mina berättelser ({savedStories.length})</button>}{story && <button className={`quiet-button save-button${isSaved ? ' saved' : ''}`} onClick={saveStory} disabled={isSaved}>{isSaved ? '✓ Sparad' : 'Spara berättelse'}</button>}{story && <button className="quiet-button" onClick={reset}>Ny berättelse</button>}</div></header>
     {libraryOpen && <section className="library"><div className="library-heading"><p className="eyebrow">SPARADE BERÄTTELSER</p><button onClick={() => setLibraryOpen(false)} aria-label="Stäng">×</button></div>{savedStories.map((savedStory) => <article className="saved-story" key={savedStory.id}><button className="saved-main" onClick={() => openSavedStory(savedStory)}><span>{savedStory.genre}</span><strong>{savedStory.title}</strong><small>Fortsätt läsa →</small></button><button className="delete-story" onClick={() => deleteSavedStory(savedStory.id)} aria-label={`Radera ${savedStory.title}`}>×</button></article>)}</section>}
     {!story ? <section className="intro">
