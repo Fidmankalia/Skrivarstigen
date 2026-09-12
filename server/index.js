@@ -85,15 +85,28 @@ Rules:
 - Give exactly two short, concrete action choices (max ~8 words each) for what the protagonist can do now. The choices must be clearly different from each other.
 - Never print labels like "Choice A" - just the action itself, e.g. "Follow the faint light between the trees".`
 
-function getSystemPrompt(language) {
-  return language === 'en' ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT_SV
+const AGE_RULE_SV = {
+  barn: 'Skriv med enkel och tydlig svenska anpassad för yngre läsare (ca 10-15 år): korta meningar, vanliga och lättförståeliga ord, undvik krångliga eller ovanliga uttryck och långa bisatser.',
+  vuxen: 'Skriv med ett mognare språk anpassat för vuxna läsare: rikare ordförråd och mer varierade meningskonstruktioner när det passar berättelsen.',
 }
 
-async function generateStep(userPrompt, language) {
+const AGE_RULE_EN = {
+  barn: 'Write in simple, clear English suited for younger readers (roughly ages 10-15): short sentences, common everyday words, avoid complicated or rare vocabulary and long subordinate clauses.',
+  vuxen: 'Write with a more mature vocabulary suited for adult readers: richer language and more varied sentence structures where it fits the story.',
+}
+
+function getSystemPrompt(language, ageGroup) {
+  const age = ageGroup === 'barn' ? 'barn' : 'vuxen'
+  return language === 'en'
+    ? `${SYSTEM_PROMPT_EN}\n- ${AGE_RULE_EN[age]}`
+    : `${SYSTEM_PROMPT_SV}\n- ${AGE_RULE_SV[age]}`
+}
+
+async function generateStep(userPrompt, language, ageGroup) {
   const response = await client.messages.parse({
     model: MODEL,
     max_tokens: 1024,
-    system: getSystemPrompt(language),
+    system: getSystemPrompt(language, ageGroup),
     messages: [{ role: 'user', content: userPrompt }],
     output_config: { format: zodOutputFormat(StoryStepSchema) },
   })
@@ -137,12 +150,13 @@ Skriv nästa stycke i berättelsen som en direkt fortsättning på valet ovan, o
 
 app.post('/api/story/start', async (req, res) => {
   try {
-    const { genre, idea, language } = req.body
+    const { genre, idea, language, ageGroup } = req.body
     if (!genre) return res.status(400).json({ error: 'Genre saknas' })
     const lang = language === 'en' ? 'en' : 'sv'
+    const age = ageGroup === 'barn' ? 'barn' : 'vuxen'
 
     const prompt = buildStartPrompt(lang, genre, idea)
-    const result = await generateStep(prompt, lang)
+    const result = await generateStep(prompt, lang, age)
     res.json(result)
   } catch (error) {
     console.error('Fel vid start av berättelse:', error)
@@ -152,14 +166,15 @@ app.post('/api/story/start', async (req, res) => {
 
 app.post('/api/story/continue', async (req, res) => {
   try {
-    const { genre, story, choice, language } = req.body
+    const { genre, story, choice, language, ageGroup } = req.body
     if (!genre || !story || !choice) {
       return res.status(400).json({ error: 'Genre, berättelse eller val saknas' })
     }
     const lang = language === 'en' ? 'en' : 'sv'
+    const age = ageGroup === 'barn' ? 'barn' : 'vuxen'
 
     const prompt = buildContinuePrompt(lang, genre, story, choice)
-    const result = await generateStep(prompt, lang)
+    const result = await generateStep(prompt, lang, age)
     res.json(result)
   } catch (error) {
     console.error('Fel vid fortsättning av berättelse:', error)

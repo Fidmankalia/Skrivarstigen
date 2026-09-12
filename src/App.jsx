@@ -18,6 +18,7 @@ function App() {
   const [isSaved, setIsSaved] = useState(false)
   const [readingFont, setReadingFont] = useState(() => localStorage.getItem('skrivstigen-font') || 'serif')
   const [language, setLanguage] = useState(() => localStorage.getItem('skrivstigen-language') || 'sv')
+  const [ageGroup, setAgeGroup] = useState(() => localStorage.getItem('skrivstigen-age-group') || 'vuxen')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [installPromptEvent, setInstallPromptEvent] = useState(null)
@@ -34,6 +35,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('skrivstigen-font', readingFont)
   }, [readingFont])
+
+  useEffect(() => {
+    localStorage.setItem('skrivstigen-age-group', ageGroup)
+  }, [ageGroup])
 
   useEffect(() => {
     localStorage.setItem('skrivstigen-language', language)
@@ -80,7 +85,7 @@ function App() {
       const response = await fetch('/api/story/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ genre, idea, language }),
+        body: JSON.stringify({ genre, idea, language, ageGroup }),
       })
       if (!response.ok) throw new Error(await readErrorMessage(response))
       const data = await response.json()
@@ -102,7 +107,7 @@ function App() {
       const response = await fetch('/api/story/continue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ genre, story, choice, language }),
+        body: JSON.stringify({ genre, story, choice, language, ageGroup }),
       })
       if (!response.ok) throw new Error(await readErrorMessage(response))
       const data = await response.json()
@@ -172,6 +177,7 @@ function App() {
         <label>Vilken genre passar din berättelse?<div className="genre-grid">{genres.map((item) => <button type="button" key={item} className={genre === item ? 'genre active' : 'genre'} onClick={() => setGenre(item)}>{item}</button>)}</div></label>
         <label>Vad ska berättelsen handla om?<textarea value={idea} onChange={(event) => setIdea(event.target.value)} placeholder="Till exempel: Erik hittar en hemlig grotta vid sjön och hör någon ropa på hjälp..." rows="4" /></label>
         <label>Vilket språk ska berättelsen skrivas på?<div className="font-toggle" role="group" aria-label="Berättelsens språk"><button type="button" className={language === 'sv' ? 'active' : ''} onClick={() => setLanguage('sv')}>Svenska</button><button type="button" className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')}>English</button></div></label>
+        <label>Vem ska läsa berättelsen?<div className="font-toggle" role="group" aria-label="Åldersanpassning"><button type="button" className={ageGroup === 'barn' ? 'active' : ''} onClick={() => setAgeGroup('barn')}>Barn (upp till 12)</button><button type="button" className={ageGroup === 'vuxen' ? 'active' : ''} onClick={() => setAgeGroup('vuxen')}>Vuxen (13+)</button></div></label>
         <button className="primary-button" type="submit" disabled={loading}>{loading ? 'Skriver berättelsen …' : 'Börja berättelsen'} <span>→</span></button>
         {error && <p className="status-error">{error}</p>}
       </form>
