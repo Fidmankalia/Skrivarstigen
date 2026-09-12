@@ -4,18 +4,23 @@ import './App.css'
 const genres = ['Fantasy', 'Mysterie', 'Skräck', 'Äventyr', 'Romantik', 'Sci-fi']
 
 function App() {
-  const [genre, setGenre] = useState('Fantasy')
-  const [title, setTitle] = useState('')
-  const [idea, setIdea] = useState('')
-  const [story, setStory] = useState('')
-  const [choices, setChoices] = useState([])
+  const [draft] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('skrivstigen-draft')) || null } catch { return null }
+  })
+  const [genre, setGenre] = useState(draft?.genre || 'Fantasy')
+  const [title, setTitle] = useState(draft?.title || '')
+  const [idea, setIdea] = useState(draft?.idea || '')
+  const [story, setStory] = useState(draft?.story || '')
+  const [choices, setChoices] = useState(draft?.choices || [])
   const [customChoice, setCustomChoice] = useState('')
-  const [storyId, setStoryId] = useState('')
+  const [storyId, setStoryId] = useState(draft?.storyId || '')
   const [savedStories, setSavedStories] = useState(() => {
     try { return JSON.parse(localStorage.getItem('skrivstigen-stories')) || [] } catch { return [] }
   })
   const [libraryOpen, setLibraryOpen] = useState(false)
-  const [isSaved, setIsSaved] = useState(false)
+  const [isSaved, setIsSaved] = useState(draft?.isSaved || false)
+  const [ended, setEnded] = useState(draft?.ended || false)
+  const [history, setHistory] = useState([])
   const [readingFont, setReadingFont] = useState(() => localStorage.getItem('skrivstigen-font') || 'serif')
   const [language, setLanguage] = useState(() => localStorage.getItem('skrivstigen-language') || 'sv')
   const [ageGroup, setAgeGroup] = useState(() => localStorage.getItem('skrivstigen-age-group') || 'vuxen')
@@ -31,6 +36,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem('skrivstigen-stories', JSON.stringify(savedStories))
   }, [savedStories])
+
+  // Auto-sparar den pågående berättelsen (skiljt från det medvetna
+  // "Spara berättelse"-biblioteket) så inget går förlorat om appen
+  // stängs av misstag utan att man sparat manuellt.
+  useEffect(() => {
+    if (!story) {
+      localStorage.removeItem('skrivstigen-draft')
+      return
+    }
+    const currentDraft = { storyId, title, genre, idea, story, choices, ended, isSaved }
+    localStorage.setItem('skrivstigen-draft', JSON.stringify(currentDraft))
+  }, [storyId, title, genre, idea, story, choices, ended, isSaved])
 
   useEffect(() => {
     localStorage.setItem('skrivstigen-font', readingFont)
@@ -91,7 +108,9 @@ function App() {
       const data = await response.json()
       setStoryId(Date.now().toString())
       setStory(data.text)
-      setChoices(data.choices)
+      setChoices(data.isEnding ? [] : data.choices)
+      setEnded(Boolean(data.isEnding))
+      setHistory([])
       setIsSaved(false)
     } catch (err) {
       setError(err.message || 'Berättelse-AI:n är inte tillgänglig just nu. Försök igen om en liten stund.')
@@ -103,6 +122,8 @@ function App() {
   async function choose(choice) {
     setLoading(true)
     setError('')
+    const previousStory = story
+    const previousChoices = choices
     try {
       const response = await fetch('/api/story/continue', {
         method: 'POST',
@@ -111,8 +132,10 @@ function App() {
       })
       if (!response.ok) throw new Error(await readErrorMessage(response))
       const data = await response.json()
+      setHistory((current) => [...current, { story: previousStory, choices: previousChoices }])
       setStory((current) => `${current}\n\n${data.text}`)
-      setChoices(data.choices)
+      setChoices(data.isEnding ? [] : data.choices)
+      setEnded(Boolean(data.isEnding))
       setIsSaved(false)
     } catch (err) {
       setError(err.message || 'Berättelse-AI:n är inte tillgänglig just nu. Försök igen om en liten stund.')
@@ -121,9 +144,23 @@ function App() {
     }
   }
 
+  function goBack() {
+    if (history.length === 0) {
+      reset()
+      return
+    }
+    const previous = history[history.length - 1]
+    setHistory((current) => current.slice(0, -1))
+    setStory(previous.story)
+    setChoices(previous.choices)
+    setEnded(false)
+    setIsSaved(false)
+    setError('')
+  }
+
   function saveStory() {
     if (!story || !storyId) return
-    const savedStory = { id: storyId, title: title || `Min ${genre.toLowerCase()}berättelse`, genre, idea, story, choices, updatedAt: Date.now() }
+    const savedStory = { id: storyId, title: title || `Min ${genre.toLowerCase()}berättelse`, genre, idea, story, choices, ended, updatedAt: Date.now() }
     setSavedStories((current) => [savedStory, ...current.filter((item) => item.id !== storyId)])
     setIsSaved(true)
   }
@@ -136,16 +173,19 @@ function App() {
     setCustomChoice('')
   }
 
-  function reset() { setStory(''); setChoices([]); setIdea(''); setTitle(''); setCustomChoice(''); setStoryId(''); setLibraryOpen(false); setIsSaved(false); setError('') }
+  function reset() { setStory(''); setChoices([]); setIdea(''); setTitle(''); setCustomChoice(''); setStoryId(''); setLibraryOpen(false); setIsSaved(false); setEnded(false); setHistory([]); setError('') }
 
   function openSavedStory(savedStory) {
-    setStoryId(savedStory.id); setTitle(savedStory.title); setGenre(savedStory.genre); setIdea(savedStory.idea); setStory(savedStory.story); setChoices(savedStory.choices); setLibraryOpen(false); setIsSaved(true)
+    setStoryId(savedStory.id); setTitle(savedStory.title); setGenre(savedStory.genre); setIdea(savedStory.idea); setStory(savedStory.story); setChoices(savedStory.choices); setEnded(Boolean(savedStory.ended)); setHistory([]); setLibraryOpen(false); setIsSaved(true)
   }
 
   function deleteSavedStory(id) {
     setSavedStories((current) => current.filter((item) => item.id !== id))
     if (id === storyId) setIsSaved(false)
   }
+
+  const chapterNumber = story ? story.split('\n\n').length : 0
+  const chapterHeading = ended ? 'Slutet' : chapterNumber <= 1 ? 'Det första valet' : 'Vägen fortsätter'
 
   return <main className={`app-shell${story ? '' : ' has-forest-bg'}`}>
     <div className="mushrooms">
@@ -168,7 +208,7 @@ function App() {
     </div>
     {!isStandalone && !story && installPromptEvent && <div className="install-banner"><span>Vill du ha Skrivstigen som en app på hemskärmen?</span><div className="install-banner-actions"><button onClick={installApp}>Installera appen</button><button className="dismiss" onClick={() => setInstallPromptEvent(null)} aria-label="Stäng">×</button></div></div>}
     {!isStandalone && !story && !installPromptEvent && isIos && showIosHint && <div className="install-banner"><span>Lägg till som app: tryck Dela-ikonen <svg width="14" height="16" viewBox="0 0 14 16" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ verticalAlign: 'middle', margin: '0 2px' }}><path d="M7 1v9M4 4l3-3 3 3M1 9v5a1 1 0 001 1h10a1 1 0 001-1V9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg> nedtill i Safari, välj sedan "Lägg till på hemskärmen".</span><div className="install-banner-actions"><button className="dismiss" onClick={() => setShowIosHint(false)} aria-label="Stäng">×</button></div></div>}
-    <header className="topbar"><button className="brand" onClick={reset}><span>✦</span> Skrivstigen</button><div className="header-actions">{savedStories.length > 0 && <button className="quiet-button" onClick={() => setLibraryOpen(!libraryOpen)}>Mina berättelser ({savedStories.length})</button>}{story && <button className={`quiet-button save-button${isSaved ? ' saved' : ''}`} onClick={saveStory} disabled={isSaved}>{isSaved ? '✓ Sparad' : 'Spara berättelse'}</button>}{story && <button className="quiet-button" onClick={reset}>Ny berättelse</button>}</div></header>
+    <header className="topbar"><button className="brand" onClick={reset}><span>✦</span> Skrivstigen</button><div className="header-actions">{savedStories.length > 0 && <button className="quiet-button" onClick={() => setLibraryOpen(!libraryOpen)}>Mina berättelser ({savedStories.length})</button>}{story && <button className="quiet-button" onClick={goBack} disabled={loading} title="Ångra senaste stycket/valet">← Tillbaka</button>}{story && <button className={`quiet-button save-button${isSaved ? ' saved' : ''}`} onClick={saveStory} disabled={isSaved}>{isSaved ? '✓ Sparad' : 'Spara berättelse'}</button>}{story && <button className="quiet-button" onClick={reset}>Ny berättelse</button>}</div></header>
     {libraryOpen && <section className="library"><div className="library-heading"><p className="eyebrow">SPARADE BERÄTTELSER</p><button onClick={() => setLibraryOpen(false)} aria-label="Stäng">×</button></div>{savedStories.map((savedStory) => <article className="saved-story" key={savedStory.id}><button className="saved-main" onClick={() => openSavedStory(savedStory)}><span>{savedStory.genre}</span><strong>{savedStory.title}</strong><small>Fortsätt läsa →</small></button><button className="delete-story" onClick={() => deleteSavedStory(savedStory.id)} aria-label={`Radera ${savedStory.title}`}>×</button></article>)}</section>}
     {!story ? <section className="intro">
       <p className="eyebrow">DIN BERÄTTELSE BÖRJAR HÄR</p><h1>Välj vägen.<br /><em>Skriv äventyret.</em></h1><p className="lead">Sätt scenen med några ord. Sedan får du välja vad som händer i din berättelse.</p>
@@ -182,11 +222,11 @@ function App() {
         {error && <p className="status-error">{error}</p>}
       </form>
     </section> : <section className="story-view">
-      <div className="story-meta">{genre} &nbsp;•&nbsp; Kapitel 1</div><h1>Det första valet</h1>
+      <div className="story-meta">{genre} &nbsp;•&nbsp; Kapitel {chapterNumber}</div><h1>{chapterHeading}</h1>
       <div className="font-toggle" role="group" aria-label="Textstil"><button type="button" className={readingFont === 'serif' ? 'active' : ''} onClick={() => setReadingFont('serif')}>Bok</button><button type="button" className={readingFont === 'sans' ? 'active' : ''} onClick={() => setReadingFont('sans')}>Enkel</button></div>
       <article className={`paper${readingFont === 'sans' ? ' sans' : ''}`}>{story.split('\n\n').map((paragraph, index, paragraphs) => <p key={index} className={index < paragraphs.length - 1 ? 'read' : ''}>{paragraph}</p>)}</article>
       <section className="choice-section">
-        {loading ? <p className="status-line">✎ Skriver nästa del av berättelsen …</p> : <>
+        {loading ? <p className="status-line">✎ Skriver nästa del av berättelsen …</p> : ended ? <div className="ending-note"><p className="eyebrow">SLUT</p><p>Berättelsen är klar. Spara den om du vill behålla den, gå tillbaka och välj något annat, eller börja en helt ny.</p></div> : <>
           <p className="eyebrow">VAD GÖR HUVUDPERSONEN NU?</p>
           <div className="choices">{choices.map((choice, index) => <button key={`${choice}-${index}`} className="choice" onClick={() => choose(choice)}><span>{String.fromCharCode(65 + index)}</span>{choice}</button>)}</div>
           <div className="or"><span>eller</span></div>

@@ -16,6 +16,7 @@ app.set('trust proxy', 1)
 
 const PORT = process.env.PORT || 3001
 const MODEL = 'claude-haiku-4-5'
+const MAX_CHAPTERS = Number(process.env.MAX_CHAPTERS) || 8
 
 // --- Skydd mot missbruk ---------------------------------------------------
 // Lager 1: gräns per person/enhet (IP), så ingen enskild kan spamma anrop.
@@ -56,10 +57,11 @@ app.use('/api/story', storyRateLimiter, dailyBudgetGuard)
 
 const StoryStepSchema = z.object({
   text: z.string().describe('Nästa stycke i berättelsen, 3-6 meningar, på det begärda språket.'),
+  isEnding: z.boolean().describe('True om detta stycke är berättelsens definitiva slut, annars false.'),
   choices: z
     .array(z.string())
-    .length(2)
-    .describe('Exakt två korta handlingsval, på det begärda språket.'),
+    .max(2)
+    .describe('Exakt två korta handlingsval om isEnding är false. Tom lista om isEnding är true.'),
 })
 
 const SYSTEM_PROMPT_SV = `Du är berättarrösten i den svenska appen "Skrivstigen" - en interaktiv berättelseapp där läsaren väljer vad som händer härnäst.
@@ -71,7 +73,9 @@ Regler:
 - Bygg alltid vidare på berättelsen hittills utan att motsäga tidigare händelser.
 - Avsluta stycket vid en naturlig vändpunkt, utan att avslöja vad som händer härnäst.
 - Ge exakt två korta, konkreta handlingsval (max ca 8 ord vardera) för vad huvudpersonen kan göra nu. Valen ska vara tydligt olika från varandra.
-- Skriv aldrig ut "Val A" eller liknande etiketter i valen - bara själva handlingen, t.ex. "Följa det svaga ljuset mellan träden".`
+- Skriv aldrig ut "Val A" eller liknande etiketter i valen - bara själva handlingen, t.ex. "Följa det svaga ljuset mellan träden".
+- Om anropet säger att detta ska vara sista stycket: skriv ett tillfredsställande, avrundat slut som knyter ihop berättelsen (inget cliffhanger, inga nya mysterier). Sätt isEnding till true och choices till en tom lista - inga fler val ska erbjudas.
+- Annars: sätt isEnding till false och ge alltid exakt två handlingsval.`
 
 const SYSTEM_PROMPT_EN = `You are the narrator voice in "Skrivstigen" - a Swedish interactive story app where the reader chooses what happens next.
 
@@ -83,7 +87,9 @@ Rules:
 - Always build on the story so far without contradicting earlier events.
 - End the passage at a natural turning point, without revealing what happens next.
 - Give exactly two short, concrete action choices (max ~8 words each) for what the protagonist can do now. The choices must be clearly different from each other.
-- Never print labels like "Choice A" - just the action itself, e.g. "Follow the faint light between the trees".`
+- Never print labels like "Choice A" - just the action itself, e.g. "Follow the faint light between the trees".
+- If the request says this should be the final passage: write a satisfying, conclusive ending that ties the story together (no cliffhanger, no new mysteries). Set isEnding to true and choices to an empty list - no further choices should be offered.
+- Otherwise: set isEnding to false and always give exactly two action choices.`
 
 const AGE_RULE_SV = {
   barn: 'Skriv med enkel och tydlig svenska anpassad för yngre läsare (ca 10-15 år): korta meningar, vanliga och lättförståeliga ord, undvik krångliga eller ovanliga uttryck och långa bisatser.',
@@ -127,7 +133,7 @@ Idé att utgå från: ${idea?.trim() || 'Ingen idé angiven - hitta på något s
 Skriv berättelsens allra första stycke (introduktionen) och ge två handlingsval för vad huvudpersonen gör härnäst.`
 }
 
-function buildContinuePrompt(language, genre, story, choice) {
+function buildContinuePrompt(language, genre, story, choice, isFinalChapter) {
   if (language === 'en') {
     return `Genre: ${genre}
 
@@ -136,7 +142,7 @@ ${story}
 
 The protagonist chooses to: ${choice}
 
-Write the next passage of the story as a direct continuation of the choice above, and give two new action choices.`
+Write the next passage of the story as a direct continuation of the choice above.${isFinalChapter ? ' This must be the final passage - end the story now.' : ' Give two new action choices.'}`
   }
   return `Genre: ${genre}
 
@@ -145,7 +151,7 @@ ${story}
 
 Huvudpersonen väljer att: ${choice}
 
-Skriv nästa stycke i berättelsen som en direkt fortsättning på valet ovan, och ge två nya handlingsval.`
+Skriv nästa stycke i berättelsen som en direkt fortsättning på valet ovan.${isFinalChapter ? ' Detta måste vara det sista stycket - avsluta berättelsen nu.' : ' Ge två nya handlingsval.'}`
 }
 
 app.post('/api/story/start', async (req, res) => {
@@ -172,8 +178,10 @@ app.post('/api/story/continue', async (req, res) => {
     }
     const lang = language === 'en' ? 'en' : 'sv'
     const age = ageGroup === 'barn' ? 'barn' : 'vuxen'
+    const currentChapter = story.split('\n\n').length
+    const isFinalChapter = currentChapter + 1 >= MAX_CHAPTERS
 
-    const prompt = buildContinuePrompt(lang, genre, story, choice)
+    const prompt = buildContinuePrompt(lang, genre, story, choice, isFinalChapter)
     const result = await generateStep(prompt, lang, age)
     res.json(result)
   } catch (error) {
