@@ -138,6 +138,9 @@ textarea{resize:vertical}
 .paper.sans{font-family:'Quicksand',sans-serif;font-weight:500;font-size:1.05rem;line-height:1.9}
 
 .choice-section{margin-top:42px;text-align:center}
+.undo-button{display:inline-flex;align-items:center;gap:6px;margin:0 auto 24px;padding:8px 16px;border:1px solid rgba(244,234,210,.3);border-radius:99px;background:rgba(16,28,25,.35);color:#dccdaa;font-size:.82rem;font-weight:600}
+.undo-button:hover{border-color:#e8a33d;color:#f4ead2}
+.ending-note p:last-child{color:#d3c6a8;margin-top:10px;font-size:.95rem;line-height:1.6}
 .choices{display:grid;gap:12px}
 .choice{display:flex;align-items:center;gap:14px;width:100%;padding:17px 19px;text-align:left;color:#2e2a49;border:1px solid #e9dcc3;border-radius:11px;background:rgba(255,253,246,.92);font-weight:600;transition:transform .15s ease,border-color .15s ease}
 .choice:hover{border-color:#5a8f7d;background:#fffdf8;transform:translateY(-2px)}
