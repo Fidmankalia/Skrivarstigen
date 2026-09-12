@@ -178,7 +178,7 @@ function App() {
     </section> : <section className="story-view">
       <div className="story-meta">{genre} &nbsp;•&nbsp; Kapitel 1</div><h1>Det första valet</h1>
       <div className="font-toggle" role="group" aria-label="Textstil"><button type="button" className={readingFont === 'serif' ? 'active' : ''} onClick={() => setReadingFont('serif')}>Bok</button><button type="button" className={readingFont === 'sans' ? 'active' : ''} onClick={() => setReadingFont('sans')}>Enkel</button></div>
-      <article className={`paper${readingFont === 'sans' ? ' sans' : ''}`}>{story.split('\n\n').map((paragraph, index) => <p key={index}>{paragraph}</p>)}</article>
+      <article className={`paper${readingFont === 'sans' ? ' sans' : ''}`}>{story.split('\n\n').map((paragraph, index, paragraphs) => <p key={index} className={index < paragraphs.length - 1 ? 'read' : ''}>{paragraph}</p>)}</article>
       <section className="choice-section">
         {loading ? <p className="status-line">✎ Skriver nästa del av berättelsen …</p> : <>
           <p className="eyebrow">VAD GÖR HUVUDPERSONEN NU?</p>

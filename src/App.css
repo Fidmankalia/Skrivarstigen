@@ -132,8 +132,9 @@ textarea{resize:vertical}
 .font-toggle button.active{background:linear-gradient(135deg,#e8a33d,#c47a3d);border-color:#e8a33d;color:#211407}
 
 .paper{padding:clamp(28px,6vw,52px);border:1px solid #e9dcc3;border-radius:6px;background:rgba(255,253,248,.96);box-shadow:0 18px 40px rgba(0,0,0,.4), 0 0 70px rgba(140,110,220,.12);color:#3a3458;font:1.14rem/2 'Fraunces',Georgia,serif;font-weight:500}
-.paper p{margin:0}
+.paper p{margin:0;border-radius:6px;transition:background-color .3s ease}
 .paper p+p{margin-top:1.6em}
+.paper p.read{background:rgba(250,204,79,.24);box-shadow:0 0 0 10px rgba(250,204,79,.24);margin-left:-10px;margin-right:-10px;padding:0 10px}
 .paper.sans{font-family:'Quicksand',sans-serif;font-weight:500;font-size:1.05rem;line-height:1.9}
 
 .choice-section{margin-top:42px;text-align:center}
