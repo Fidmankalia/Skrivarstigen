@@ -8,6 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false, // vi registrerar själva i main.jsx (med tvingad uppdatering)
       includeAssets: ['favicon.svg', 'icons.svg'],
       manifest: {
         name: 'Skrivstigen',
