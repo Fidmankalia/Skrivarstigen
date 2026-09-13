@@ -92,12 +92,12 @@ Rules:
 - Otherwise: set isEnding to false and always give exactly two action choices.`
 
 const AGE_RULE_SV = {
-  barn: 'Skriv med enkel och tydlig svenska anpassad för yngre läsare (ca 10-15 år): korta meningar, vanliga och lättförståeliga ord, undvik krångliga eller ovanliga uttryck och långa bisatser.',
+  barn: 'Skriv för barn upp till 12 år, mycket enkelt och konkret: korta meningar (helst under 12 ord, en händelse per mening), vardagliga ord ett barn känner till. Undvik poetiskt eller bildligt språk helt - inga metaforer, liknelser eller svävande stämningsbeskrivningar. Beskriv istället rakt på sak vad som konkret händer, syns, hörs och känns. Berättelsen ska fortfarande vara spännande och levande - men genom tydlig handling och tydliga känslor, inte genom vackra formuleringar som kan vara svåra att förstå.',
   vuxen: 'Skriv med ett mognare språk anpassat för vuxna läsare: rikare ordförråd och mer varierade meningskonstruktioner när det passar berättelsen.',
 }
 
 const AGE_RULE_EN = {
-  barn: 'Write in simple, clear English suited for younger readers (roughly ages 10-15): short sentences, common everyday words, avoid complicated or rare vocabulary and long subordinate clauses.',
+  barn: 'Write for children up to age 12, very simply and concretely: short sentences (ideally under 12 words, one event per sentence), everyday words a child would know. Avoid poetic or figurative language entirely - no metaphors, similes, or vague mood-setting descriptions. Instead describe plainly and concretely what happens, what is seen, heard, and felt. The story should still be exciting and vivid - but through clear action and clear emotions, not through elaborate phrasing that might be hard to follow.',
   vuxen: 'Write with a more mature vocabulary suited for adult readers: richer language and more varied sentence structures where it fits the story.',
 }
 
