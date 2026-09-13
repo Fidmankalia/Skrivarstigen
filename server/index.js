@@ -54,20 +54,30 @@ function dailyBudgetGuard(req, res, next) {
 
 app.use('/api/story', storyRateLimiter, dailyBudgetGuard)
 
-// Lager 3: separat skydd för röstuppläsning (ElevenLabs) - liten gratiskvot
-// (10k tecken/månad), så gränserna är strängare här än för texten.
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
-const ELEVENLABS_VOICES = {
-  man: process.env.ELEVENLABS_VOICE_MALE || 'JBFqnCBsd6RMkjVDRZzb', // George - Warm, Captivating Storyteller
-  kvinna: process.env.ELEVENLABS_VOICE_FEMALE || 'pFZP5JQG7iQjIQuC4Bku', // Lily - Velvety Actress
+// Lager 3: separat skydd för röstuppläsning (Azure Speech) - gratiskvoten
+// är stor (500 000 tecken/månad) men vi håller ändå koll för säkerhets skull.
+const AZURE_SPEECH_KEY = process.env.AZURE_SPEECH_KEY
+const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION || 'swedencentral'
+const AZURE_VOICES = {
+  sv: { man: 'sv-SE-MattiasNeural', kvinna: 'sv-SE-SofieNeural' },
+  en: { man: 'en-US-ChristopherNeural', kvinna: 'en-US-JennyNeural' },
 }
-const ELEVENLABS_MONTHLY_CHAR_LIMIT = Number(process.env.ELEVENLABS_MONTHLY_CHAR_LIMIT) || 9000
+const AZURE_MONTHLY_CHAR_LIMIT = Number(process.env.AZURE_MONTHLY_CHAR_LIMIT) || 450000
 let monthlyCharCount = 0
 let monthlyResetAt = getNextMonth()
 
 function getNextMonth() {
   const now = new Date()
   return new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0).getTime()
+}
+
+function escapeSsml(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
 }
 
 const speechRateLimiter = rateLimit({
@@ -80,42 +90,45 @@ const speechRateLimiter = rateLimit({
 
 app.post('/api/speech', speechRateLimiter, async (req, res) => {
   try {
-    if (!ELEVENLABS_API_KEY) return res.status(503).json({ error: 'Uppläsning med AI-röst är inte konfigurerad' })
+    if (!AZURE_SPEECH_KEY) return res.status(503).json({ error: 'Uppläsning med AI-röst är inte konfigurerad' })
 
-    const { text, voiceGender } = req.body
+    const { text, language, voiceGender } = req.body
     if (!text || typeof text !== 'string') return res.status(400).json({ error: 'Text saknas' })
     const trimmedText = text.slice(0, 2000) // säkerhetsgräns per anrop
-    const voiceId = ELEVENLABS_VOICES[voiceGender === 'kvinna' ? 'kvinna' : 'man']
+    const lang = language === 'en' ? 'en' : 'sv'
+    const locale = lang === 'en' ? 'en-US' : 'sv-SE'
+    const voiceName = AZURE_VOICES[lang][voiceGender === 'kvinna' ? 'kvinna' : 'man']
 
     if (Date.now() >= monthlyResetAt) {
       monthlyCharCount = 0
       monthlyResetAt = getNextMonth()
     }
-    if (monthlyCharCount + trimmedText.length > ELEVENLABS_MONTHLY_CHAR_LIMIT) {
+    if (monthlyCharCount + trimmedText.length > AZURE_MONTHLY_CHAR_LIMIT) {
       return res.status(503).json({ error: 'Månadens gratiskvot för AI-röst är slut.' })
     }
 
-    const elevenLabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    const ssml = `<speak version='1.0' xml:lang='${locale}'><voice xml:lang='${locale}' name='${voiceName}'>${escapeSsml(trimmedText)}</voice></speak>`
+
+    const azureResponse = await fetch(`https://${AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': ELEVENLABS_API_KEY,
+        'Ocp-Apim-Subscription-Key': AZURE_SPEECH_KEY,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'audio-24khz-96kbitrate-mono-mp3',
+        'User-Agent': 'Skrivstigen',
       },
-      body: JSON.stringify({
-        text: trimmedText,
-        model_id: 'eleven_multilingual_v2',
-      }),
+      body: ssml,
     })
 
-    if (!elevenLabsResponse.ok) {
-      const errorBody = await elevenLabsResponse.text()
-      console.error('ElevenLabs-fel:', elevenLabsResponse.status, errorBody)
+    if (!azureResponse.ok) {
+      const errorBody = await azureResponse.text()
+      console.error('Azure Speech-fel:', azureResponse.status, errorBody)
       return res.status(502).json({ error: 'Uppläsningen misslyckades' })
     }
 
     monthlyCharCount += trimmedText.length
 
-    const audioBuffer = Buffer.from(await elevenLabsResponse.arrayBuffer())
+    const audioBuffer = Buffer.from(await azureResponse.arrayBuffer())
     res.set('Content-Type', 'audio/mpeg')
     res.send(audioBuffer)
   } catch (error) {

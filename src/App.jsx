@@ -99,7 +99,7 @@ function App() {
       const response = await fetch('/api/speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: latestParagraph, voiceGender }),
+        body: JSON.stringify({ text: latestParagraph, language, voiceGender }),
       })
       if (!response.ok) throw new Error('speech-api-failed')
       const blob = await response.blob()
