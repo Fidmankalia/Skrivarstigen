@@ -53,6 +53,72 @@ function dailyBudgetGuard(req, res, next) {
 }
 
 app.use('/api/story', storyRateLimiter, dailyBudgetGuard)
+
+// Lager 3: separat skydd för röstuppläsning (ElevenLabs) - liten gratiskvot
+// (10k tecken/månad), så gränserna är strängare här än för texten.
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb' // George - Warm, Captivating Storyteller
+const ELEVENLABS_MONTHLY_CHAR_LIMIT = Number(process.env.ELEVENLABS_MONTHLY_CHAR_LIMIT) || 9000
+let monthlyCharCount = 0
+let monthlyResetAt = getNextMonth()
+
+function getNextMonth() {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0).getTime()
+}
+
+const speechRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: Number(process.env.PER_IP_SPEECH_HOURLY_LIMIT) || 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'För många uppläsningar just nu. Vänta en stund och försök igen.' },
+})
+
+app.post('/api/speech', speechRateLimiter, async (req, res) => {
+  try {
+    if (!ELEVENLABS_API_KEY) return res.status(503).json({ error: 'Uppläsning med AI-röst är inte konfigurerad' })
+
+    const { text } = req.body
+    if (!text || typeof text !== 'string') return res.status(400).json({ error: 'Text saknas' })
+    const trimmedText = text.slice(0, 2000) // säkerhetsgräns per anrop
+
+    if (Date.now() >= monthlyResetAt) {
+      monthlyCharCount = 0
+      monthlyResetAt = getNextMonth()
+    }
+    if (monthlyCharCount + trimmedText.length > ELEVENLABS_MONTHLY_CHAR_LIMIT) {
+      return res.status(503).json({ error: 'Månadens gratiskvot för AI-röst är slut.' })
+    }
+
+    const elevenLabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': ELEVENLABS_API_KEY,
+      },
+      body: JSON.stringify({
+        text: trimmedText,
+        model_id: 'eleven_multilingual_v2',
+      }),
+    })
+
+    if (!elevenLabsResponse.ok) {
+      const errorBody = await elevenLabsResponse.text()
+      console.error('ElevenLabs-fel:', elevenLabsResponse.status, errorBody)
+      return res.status(502).json({ error: 'Uppläsningen misslyckades' })
+    }
+
+    monthlyCharCount += trimmedText.length
+
+    const audioBuffer = Buffer.from(await elevenLabsResponse.arrayBuffer())
+    res.set('Content-Type', 'audio/mpeg')
+    res.send(audioBuffer)
+  } catch (error) {
+    console.error('Fel vid uppläsning:', error)
+    res.status(502).json({ error: 'Uppläsningen misslyckades' })
+  }
+})
 // ---------------------------------------------------------------------------
 
 const StoryStepSchema = z.object({

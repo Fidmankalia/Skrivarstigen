@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const genres = ['Fantasy', 'Mysterie', 'Skräck', 'Äventyr', 'Romantik', 'Sci-fi']
@@ -29,6 +29,7 @@ function App() {
   const [installPromptEvent, setInstallPromptEvent] = useState(null)
   const [showIosHint, setShowIosHint] = useState(true)
   const [speaking, setSpeaking] = useState(false)
+  const audioRef = useRef(null)
   const [voices, setVoices] = useState([])
   const [chosenVoices, setChosenVoices] = useState(() => {
     try { return JSON.parse(localStorage.getItem('skrivstigen-voices')) || {} } catch { return {} }
@@ -44,7 +45,7 @@ function App() {
 
   useEffect(() => {
     // Sluta läsa upp om komponenten avmonteras (t.ex. sidladdning om)
-    return () => { if (speechSupported) window.speechSynthesis.cancel() }
+    return () => { audioRef.current?.pause(); if (speechSupported) window.speechSynthesis.cancel() }
   }, [speechSupported])
 
   useEffect(() => {
@@ -68,14 +69,13 @@ function App() {
     setChosenVoices((current) => ({ ...current, [voiceLangPrefix]: voiceURI }))
   }
 
-  function toggleSpeech() {
-    if (!speechSupported) return
-    if (speaking) {
-      window.speechSynthesis.cancel()
+  function speakWithBrowserVoice(text) {
+    if (!speechSupported) {
       setSpeaking(false)
+      setError('Uppläsning är inte tillgänglig just nu.')
       return
     }
-    const utterance = new SpeechSynthesisUtterance(story)
+    const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = language === 'en' ? 'en-US' : 'sv-SE'
     const chosenVoice = voicesForLanguage.find((voice) => voice.voiceURI === chosenVoiceURI)
     if (chosenVoice) utterance.voice = chosenVoice
@@ -83,10 +83,43 @@ function App() {
     utterance.onerror = () => setSpeaking(false)
     window.speechSynthesis.cancel()
     window.speechSynthesis.speak(utterance)
+  }
+
+  async function toggleSpeech() {
+    if (speaking) {
+      stopSpeech()
+      return
+    }
+    const paragraphs = story.split('\n\n')
+    const latestParagraph = paragraphs[paragraphs.length - 1]
     setSpeaking(true)
+    setError('')
+    try {
+      const response = await fetch('/api/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: latestParagraph }),
+      })
+      if (!response.ok) throw new Error('speech-api-failed')
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => { setSpeaking(false); URL.revokeObjectURL(url) }
+      audio.onerror = () => { setSpeaking(false); URL.revokeObjectURL(url) }
+      await audio.play()
+    } catch {
+      // AI-rösten gick inte att nå (t.ex. månadskvoten slut) - använd
+      // webbläsarens inbyggda röst som reserv istället för att ge upp helt.
+      speakWithBrowserVoice(latestParagraph)
+    }
   }
 
   function stopSpeech() {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
     if (speechSupported) window.speechSynthesis.cancel()
     setSpeaking(false)
   }
@@ -287,7 +320,7 @@ function App() {
       <div className="story-meta">{genre} &nbsp;•&nbsp; Kapitel {chapterNumber}</div><h1>{chapterHeading}</h1>
       <div className="story-controls">
         <div className="font-toggle" role="group" aria-label="Textstil"><button type="button" className={readingFont === 'serif' ? 'active' : ''} onClick={() => setReadingFont('serif')}>Bok</button><button type="button" className={readingFont === 'sans' ? 'active' : ''} onClick={() => setReadingFont('sans')}>Enkel</button></div>
-        {speechSupported && <button type="button" className={`speak-button${speaking ? ' speaking' : ''}`} onClick={toggleSpeech}>{speaking ? '⏸ Stoppa' : '🔊 Läs upp'}</button>}
+        <button type="button" className={`speak-button${speaking ? ' speaking' : ''}`} onClick={toggleSpeech}>{speaking ? '⏸ Stoppa' : '🔊 Läs upp'}</button>
         {speechSupported && voicesForLanguage.length > 1 && <select className="voice-select" aria-label="Välj röst" value={chosenVoiceURI || voicesForLanguage[0]?.voiceURI} onChange={(event) => selectVoice(event.target.value)}>{voicesForLanguage.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name}</option>)}</select>}
       </div>
       <article className={`paper${readingFont === 'sans' ? ' sans' : ''}`}>{story.split('\n\n').map((paragraph, index, paragraphs) => <p key={index} className={index < paragraphs.length - 1 ? 'read' : ''}>{paragraph}</p>)}</article>
