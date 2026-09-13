@@ -90,6 +90,8 @@ button{cursor:pointer}
 .brand span{color:#e8a33d;margin-right:7px}
 .quiet-button{border:1px solid rgba(244,234,210,.3);border-radius:99px;padding:9px 15px;background:rgba(16,28,25,.35);color:#dccdaa;font-size:.85rem}
 .save-button.saved{border-color:#5a8f7d;color:#bfe3d4;background:rgba(90,143,125,.22);cursor:default}
+.download-button{background:linear-gradient(135deg,#e8a33d,#c47a3d);border-color:#e8a33d;color:#211407;font-weight:700}
+.download-button:hover{background:linear-gradient(135deg,#f0af4d,#d38948)}
 
 .library{position:relative;z-index:1;width:min(760px,calc(100% - 48px));margin:0 auto -38px;padding:22px;border:1px solid #e9dcc3;border-radius:14px;background:#fffdf6;box-shadow:0 12px 32px rgba(0,0,0,.35)}
 .library-heading{display:flex;justify-content:space-between;align-items:flex-start}
