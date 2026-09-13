@@ -57,7 +57,10 @@ app.use('/api/story', storyRateLimiter, dailyBudgetGuard)
 // Lager 3: separat skydd för röstuppläsning (ElevenLabs) - liten gratiskvot
 // (10k tecken/månad), så gränserna är strängare här än för texten.
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
-const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb' // George - Warm, Captivating Storyteller
+const ELEVENLABS_VOICES = {
+  man: process.env.ELEVENLABS_VOICE_MALE || 'JBFqnCBsd6RMkjVDRZzb', // George - Warm, Captivating Storyteller
+  kvinna: process.env.ELEVENLABS_VOICE_FEMALE || 'pFZP5JQG7iQjIQuC4Bku', // Lily - Velvety Actress
+}
 const ELEVENLABS_MONTHLY_CHAR_LIMIT = Number(process.env.ELEVENLABS_MONTHLY_CHAR_LIMIT) || 9000
 let monthlyCharCount = 0
 let monthlyResetAt = getNextMonth()
@@ -79,9 +82,10 @@ app.post('/api/speech', speechRateLimiter, async (req, res) => {
   try {
     if (!ELEVENLABS_API_KEY) return res.status(503).json({ error: 'Uppläsning med AI-röst är inte konfigurerad' })
 
-    const { text } = req.body
+    const { text, voiceGender } = req.body
     if (!text || typeof text !== 'string') return res.status(400).json({ error: 'Text saknas' })
     const trimmedText = text.slice(0, 2000) // säkerhetsgräns per anrop
+    const voiceId = ELEVENLABS_VOICES[voiceGender === 'kvinna' ? 'kvinna' : 'man']
 
     if (Date.now() >= monthlyResetAt) {
       monthlyCharCount = 0
@@ -91,7 +95,7 @@ app.post('/api/speech', speechRateLimiter, async (req, res) => {
       return res.status(503).json({ error: 'Månadens gratiskvot för AI-röst är slut.' })
     }
 
-    const elevenLabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+    const elevenLabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

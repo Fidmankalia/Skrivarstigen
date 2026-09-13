@@ -29,6 +29,7 @@ function App() {
   const [installPromptEvent, setInstallPromptEvent] = useState(null)
   const [showIosHint, setShowIosHint] = useState(true)
   const [speaking, setSpeaking] = useState(false)
+  const [voiceGender, setVoiceGender] = useState(() => localStorage.getItem('skrivstigen-voice-gender') || 'man')
   const audioRef = useRef(null)
   const [voices, setVoices] = useState([])
   const [chosenVoices, setChosenVoices] = useState(() => {
@@ -98,7 +99,7 @@ function App() {
       const response = await fetch('/api/speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: latestParagraph }),
+        body: JSON.stringify({ text: latestParagraph, voiceGender }),
       })
       if (!response.ok) throw new Error('speech-api-failed')
       const blob = await response.blob()
@@ -147,6 +148,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('skrivstigen-age-group', ageGroup)
   }, [ageGroup])
+
+  useEffect(() => {
+    localStorage.setItem('skrivstigen-voice-gender', voiceGender)
+  }, [voiceGender])
 
   useEffect(() => {
     localStorage.setItem('skrivstigen-language', language)
@@ -321,7 +326,8 @@ function App() {
       <div className="story-controls">
         <div className="font-toggle" role="group" aria-label="Textstil"><button type="button" className={readingFont === 'serif' ? 'active' : ''} onClick={() => setReadingFont('serif')}>Bok</button><button type="button" className={readingFont === 'sans' ? 'active' : ''} onClick={() => setReadingFont('sans')}>Enkel</button></div>
         <button type="button" className={`speak-button${speaking ? ' speaking' : ''}`} onClick={toggleSpeech}>{speaking ? '⏸ Stoppa' : '🔊 Läs upp'}</button>
-        {speechSupported && voicesForLanguage.length > 1 && <select className="voice-select" aria-label="Välj röst" value={chosenVoiceURI || voicesForLanguage[0]?.voiceURI} onChange={(event) => selectVoice(event.target.value)}>{voicesForLanguage.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name}</option>)}</select>}
+        <div className="font-toggle" role="group" aria-label="Röst"><button type="button" className={voiceGender === 'man' ? 'active' : ''} onClick={() => setVoiceGender('man')}>Man</button><button type="button" className={voiceGender === 'kvinna' ? 'active' : ''} onClick={() => setVoiceGender('kvinna')}>Kvinna</button></div>
+        {speechSupported && voicesForLanguage.length > 1 && <select className="voice-select" aria-label="Reservröst" value={chosenVoiceURI || voicesForLanguage[0]?.voiceURI} onChange={(event) => selectVoice(event.target.value)}>{voicesForLanguage.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name}</option>)}</select>}
       </div>
       <article className={`paper${readingFont === 'sans' ? ' sans' : ''}`}>{story.split('\n\n').map((paragraph, index, paragraphs) => <p key={index} className={index < paragraphs.length - 1 ? 'read' : ''}>{paragraph}</p>)}</article>
       <section className="choice-section">
