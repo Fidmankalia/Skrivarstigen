@@ -29,16 +29,44 @@ function App() {
   const [installPromptEvent, setInstallPromptEvent] = useState(null)
   const [showIosHint, setShowIosHint] = useState(true)
   const [speaking, setSpeaking] = useState(false)
+  const [voices, setVoices] = useState([])
+  const [chosenVoices, setChosenVoices] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('skrivstigen-voices')) || {} } catch { return {} }
+  })
 
   const isStandalone = typeof window !== 'undefined' &&
     (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true)
   const isIos = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
   const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+  const voiceLangPrefix = language === 'en' ? 'en' : 'sv'
+  const voicesForLanguage = voices.filter((voice) => voice.lang.toLowerCase().startsWith(voiceLangPrefix))
+  const chosenVoiceURI = chosenVoices[voiceLangPrefix]
 
   useEffect(() => {
     // Sluta läsa upp om komponenten avmonteras (t.ex. sidladdning om)
     return () => { if (speechSupported) window.speechSynthesis.cancel() }
   }, [speechSupported])
+
+  useEffect(() => {
+    if (!speechSupported) return
+    function loadVoices() {
+      // Nät-baserade röster (t.ex. Googles) låter oftast mer naturliga än
+      // enhetens lokala standardröst - lista dem först.
+      const list = [...window.speechSynthesis.getVoices()].sort((a, b) => Number(a.localService) - Number(b.localService))
+      setVoices(list)
+    }
+    loadVoices()
+    window.speechSynthesis.addEventListener('voiceschanged', loadVoices)
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', loadVoices)
+  }, [speechSupported])
+
+  useEffect(() => {
+    localStorage.setItem('skrivstigen-voices', JSON.stringify(chosenVoices))
+  }, [chosenVoices])
+
+  function selectVoice(voiceURI) {
+    setChosenVoices((current) => ({ ...current, [voiceLangPrefix]: voiceURI }))
+  }
 
   function toggleSpeech() {
     if (!speechSupported) return
@@ -49,6 +77,8 @@ function App() {
     }
     const utterance = new SpeechSynthesisUtterance(story)
     utterance.lang = language === 'en' ? 'en-US' : 'sv-SE'
+    const chosenVoice = voicesForLanguage.find((voice) => voice.voiceURI === chosenVoiceURI)
+    if (chosenVoice) utterance.voice = chosenVoice
     utterance.onend = () => setSpeaking(false)
     utterance.onerror = () => setSpeaking(false)
     window.speechSynthesis.cancel()
@@ -258,6 +288,7 @@ function App() {
       <div className="story-controls">
         <div className="font-toggle" role="group" aria-label="Textstil"><button type="button" className={readingFont === 'serif' ? 'active' : ''} onClick={() => setReadingFont('serif')}>Bok</button><button type="button" className={readingFont === 'sans' ? 'active' : ''} onClick={() => setReadingFont('sans')}>Enkel</button></div>
         {speechSupported && <button type="button" className={`speak-button${speaking ? ' speaking' : ''}`} onClick={toggleSpeech}>{speaking ? '⏸ Stoppa' : '🔊 Läs upp'}</button>}
+        {speechSupported && voicesForLanguage.length > 1 && <select className="voice-select" aria-label="Välj röst" value={chosenVoiceURI || voicesForLanguage[0]?.voiceURI} onChange={(event) => selectVoice(event.target.value)}>{voicesForLanguage.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name}</option>)}</select>}
       </div>
       <article className={`paper${readingFont === 'sans' ? ' sans' : ''}`}>{story.split('\n\n').map((paragraph, index, paragraphs) => <p key={index} className={index < paragraphs.length - 1 ? 'read' : ''}>{paragraph}</p>)}</article>
       <section className="choice-section">
