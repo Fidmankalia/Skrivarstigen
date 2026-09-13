@@ -28,10 +28,38 @@ function App() {
   const [error, setError] = useState('')
   const [installPromptEvent, setInstallPromptEvent] = useState(null)
   const [showIosHint, setShowIosHint] = useState(true)
+  const [speaking, setSpeaking] = useState(false)
 
   const isStandalone = typeof window !== 'undefined' &&
     (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true)
   const isIos = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
+
+  useEffect(() => {
+    // Sluta läsa upp om komponenten avmonteras (t.ex. sidladdning om)
+    return () => { if (speechSupported) window.speechSynthesis.cancel() }
+  }, [speechSupported])
+
+  function toggleSpeech() {
+    if (!speechSupported) return
+    if (speaking) {
+      window.speechSynthesis.cancel()
+      setSpeaking(false)
+      return
+    }
+    const utterance = new SpeechSynthesisUtterance(story)
+    utterance.lang = language === 'en' ? 'en-US' : 'sv-SE'
+    utterance.onend = () => setSpeaking(false)
+    utterance.onerror = () => setSpeaking(false)
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+    setSpeaking(true)
+  }
+
+  function stopSpeech() {
+    if (speechSupported) window.speechSynthesis.cancel()
+    setSpeaking(false)
+  }
 
   useEffect(() => {
     localStorage.setItem('skrivstigen-stories', JSON.stringify(savedStories))
@@ -96,6 +124,7 @@ function App() {
 
   async function startStory(event) {
     event.preventDefault()
+    stopSpeech()
     setLoading(true)
     setError('')
     try {
@@ -120,6 +149,7 @@ function App() {
   }
 
   async function choose(choice) {
+    stopSpeech()
     setLoading(true)
     setError('')
     const previousStory = story
@@ -145,6 +175,7 @@ function App() {
   }
 
   function goBack() {
+    stopSpeech()
     if (history.length === 0) {
       reset()
       return
@@ -173,9 +204,10 @@ function App() {
     setCustomChoice('')
   }
 
-  function reset() { setStory(''); setChoices([]); setIdea(''); setTitle(''); setCustomChoice(''); setStoryId(''); setLibraryOpen(false); setIsSaved(false); setEnded(false); setHistory([]); setError('') }
+  function reset() { stopSpeech(); setStory(''); setChoices([]); setIdea(''); setTitle(''); setCustomChoice(''); setStoryId(''); setLibraryOpen(false); setIsSaved(false); setEnded(false); setHistory([]); setError('') }
 
   function openSavedStory(savedStory) {
+    stopSpeech()
     setStoryId(savedStory.id); setTitle(savedStory.title); setGenre(savedStory.genre); setIdea(savedStory.idea); setStory(savedStory.story); setChoices(savedStory.choices); setEnded(Boolean(savedStory.ended)); setHistory([]); setLibraryOpen(false); setIsSaved(true)
   }
 
@@ -223,7 +255,10 @@ function App() {
       </form>
     </section> : <section className="story-view">
       <div className="story-meta">{genre} &nbsp;•&nbsp; Kapitel {chapterNumber}</div><h1>{chapterHeading}</h1>
-      <div className="font-toggle" role="group" aria-label="Textstil"><button type="button" className={readingFont === 'serif' ? 'active' : ''} onClick={() => setReadingFont('serif')}>Bok</button><button type="button" className={readingFont === 'sans' ? 'active' : ''} onClick={() => setReadingFont('sans')}>Enkel</button></div>
+      <div className="story-controls">
+        <div className="font-toggle" role="group" aria-label="Textstil"><button type="button" className={readingFont === 'serif' ? 'active' : ''} onClick={() => setReadingFont('serif')}>Bok</button><button type="button" className={readingFont === 'sans' ? 'active' : ''} onClick={() => setReadingFont('sans')}>Enkel</button></div>
+        {speechSupported && <button type="button" className={`speak-button${speaking ? ' speaking' : ''}`} onClick={toggleSpeech}>{speaking ? '⏸ Stoppa' : '🔊 Läs upp'}</button>}
+      </div>
       <article className={`paper${readingFont === 'sans' ? ' sans' : ''}`}>{story.split('\n\n').map((paragraph, index, paragraphs) => <p key={index} className={index < paragraphs.length - 1 ? 'read' : ''}>{paragraph}</p>)}</article>
       <section className="choice-section">
         {!loading && <button className="undo-button" onClick={goBack} title="Ångra senaste stycket/valet">↺ Ångra</button>}
